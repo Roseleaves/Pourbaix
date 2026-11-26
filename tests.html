@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Pourbaix chemistry tests</title>
+<style>
+  body { font-family: ui-monospace, Consolas, monospace; background:#f6f3fa; color:#2f2938; margin:24px; }
+  h1 { font-size:20px; }
+  table { border-collapse:collapse; width:100%; max-width:1200px; background:#fff; }
+  th,td { border:1px solid #ddd3e8; padding:5px 8px; font-size:12px; text-align:left; vertical-align:top; }
+  th { background:#eee7f6; position:sticky; top:0; }
+  .pass { color:#2e7d32; font-weight:700; } .fail { color:#c62828; font-weight:700; }
+  .summary { font-size:24px; padding:12px 16px; border-radius:10px; margin:12px 0; display:inline-block; }
+  .ok { background:#e3f4e4; color:#1b5e20; } .bad { background:#fde7e7; color:#b71c1c; }
+  pre { background:#fff; padding:10px; border:1px solid #ddd3e8; overflow:auto; }
+</style>
+</head>
+<body>
+<h1>Pourbaix 化学层自检</h1>
+<div id="summary" class="summary">running…</div>
+<div id="out"></div>
+<script src="data.js"></script>
+<script src="chem.js"></script>
+<script>
+(function () {
+  const D = PBData, C = PBChem;
+  const rows = [];
+  let pass = 0, fail = 0;
+  function check(name, cond, detail) {
+    if (cond) { pass++; rows.push([name, "PASS", detail || ""]); }
+    else { fail++; rows.push([name, "FAIL", detail || ""]); }
+  }
+  function close(a, b, tol) { return Math.abs(a - b) <= (tol == null ? 1e-6 : tol); }
+  const $ = id => document.getElementById(id);
+
+  window.addEventListener("error", e => {
+    rows.push(["RUNTIME ERROR", "FAIL", e.message + " @ " + e.filename + ":" + e.lineno]);
+    fail++;
+    render();
+  });
+
+  function makeSys(opt) {
+    return C.createSystem(Object.assign({
+      main: "Fe", selected: [], env: {}, Ctot: 1e-3, Penv: 1, xAxis: "pH", pHfix: 7, couple: true,
+    }, opt));
+  }
+
+  const pka = {};
+  try {
+    // 1. 数据完整性
+    let missing = [];
+    for (const el in D.ELEMENT_SPECIES) {
+      for (const id of D.ELEMENT_SPECIES[el]) {
+        if (!D.byId[id]) missing.push(el + ":" + id);
+        else if (!(D.byId[id].el[el] > 0)) missing.push(el + ":" + id + "(no element)");
+      }
+    }
+    check("元素物种表全部存在且含对应元素", missing.length === 0, missing.join(", "));
+
+    let badLig = [];
+    for (const sp of D.DB) for (const lid of sp.ligs) if (!D.byId[lid]) badLig.push(sp.id + "→" + lid);
+    check("所有配体引用存在", badLig.length === 0, badLig.join(", "));
+
+    let badFam = [];
+    for (const k in D.FAMILIES) for (const id of D.FAMILIES[k].list) if (!D.byId[id]) badFam.push(k + ":" + id);
+    check("酸碱家族成员存在", badFam.length === 0, badFam.join(", "));
+
+    // 2. pKa
+    for (const k in D.FAMILIES) {
+      const info = C.familyInfo(k);
+      pka[k] = info.pKa.map(v => +v.toFixed(2));
+    }
+    check("碳酸 pKa≈6.36/10.33", close(pka.carbonate[0], 6.36, 0.15) && close(pka.carbonate[1], 10.33, 0.15), JSON.stringify(pka.carbonate));
+    check("氨 pKa≈9.25", close(pka.ammonia[0], 9.25, 0.2), JSON.stringify(pka.ammonia));
+    check("磷酸 pKa≈2.17/7.20/12.33", close(pka.phosphate[0], 2.17, 0.2) && close(pka.phosphate[1], 7.20, 0.2) && close(pka.phosphate[2], 12.33, 0.2), JSON.stringify(pka.phosphate));
+    check("草酸 pKa≈1.25/4.14", close(pka.oxalate[0], 1.25, 0.15) && close(pka.oxalate[1], 4.14, 0.15), JSON.stringify(pka.oxalate));
+    check("氢氟酸 pKa≈3.15", close(pka.fluoride[0], 3.15, 0.2), JSON.stringify(pka.fluoride));
+    check("硫化氢 pKa≈6.97/12.93", close(pka.sulfide[0], 6.97, 0.2) && close(pka.sulfide[1], 12.93, 0.2), JSON.stringify(pka.sulfide));
+
+    // 3. 预设体系分解
+    for (const pr of D.PRESETS) {
+      const sys = makeSys({ main: pr.main, selected: pr.selected, env: {}, Ctot: pr.Ctot });
+      check("预设 " + pr.name + " 全部物种可配平", sys.unbalanced.length === 0, sys.unbalanced.join(", "));
+      check("预设 " + pr.name + " 有优势相", sys.selectedMain.length > 0, "n=" + sys.selectedMain.length);
+    }
+
+    // 3b. 锌与成矿物种
+    const zn = makeSys({ main: "Zn", selected: D.ELEMENT_SPECIES.Zn, env: {}, Ctot: 1e-3 });
+    check("Zn 物种全部可配平", zn.unbalanced.length === 0, zn.unbalanced.join(", "));
+    check("Zn 有优势相", zn.selectedMain.length > 0, "n=" + zn.selectedMain.length);
+    const znM = makeSys({ main: "Zn", selected: ["Zn2+", "ZnCO3", "ZnS"], env: { "CO32-": { on: true, c: 1e-3 }, "S2-": { on: true, c: 1e-3 } }, Ctot: 1e-3 });
+    check("Zn 碳酸盐/硫化物可配平", znM.unbalanced.length === 0, znM.unbalanced.join(", "));
+
+    // 4. 已知 E°
+    function Eof(main, a, b, env) {
+      const sys = makeSys({ main, selected: [a, b], env: env || {} });
+      const r = sys.balance(a, b);
+      return r ? r.E0 : null;
+    }
+    check("Fe³⁺/Fe²⁺ E°≈0.771", close(Eof("Fe", "Fe3+", "Fe2+"), 0.771, 0.03), String(Eof("Fe", "Fe3+", "Fe2+")));
+    check("Cu²⁺/Cu⁺ E°≈0.159", close(Eof("Cu", "Cu2+", "Cu+"), 0.159, 0.03), String(Eof("Cu", "Cu2+", "Cu+")));
+    check("MnO₂/Mn²⁺ E°≈1.23", close(Eof("Mn", "MnO2", "Mn2+"), 1.23, 0.05), String(Eof("Mn", "MnO2", "Mn2+")));
+    check("MnO₄⁻/MnO₂ E°≈1.70", close(Eof("Mn", "MnO4-", "MnO2"), 1.70, 0.05), String(Eof("Mn", "MnO4-", "MnO2")));
+
+    // 5. A 模式多边形
+    const fe = makeSys({ main: "Fe", selected: D.PRESETS[0].selected, Ctot: 1e-3 });
+    const polys = fe.dominance(0, 14, -1.2, 1.6, 120);
+    check("Fe 预设相区多边形非空", polys.length > 0, "n=" + polys.length);
+    check("Fe 预设多边形无 NaN", polys.every(p => p.poly.every(q => isFinite(q[0]) && isFinite(q[1]))), "");
+    const win = fe.winner(7, 0.2);
+    check("Fe 在 pH7/E0.2 有优势相", !!win, String(win));
+
+    // 6. AgCl / AgCl2- 随 Cl⁻ 切换
+    function agWinner(cCl) {
+      const sys = makeSys({ main: "Ag", selected: ["Ag+", "AgCl", "AgCl2-"], env: { "Cl-": { on: true, c: cCl } }, Ctot: 1e-4 });
+      return sys.winner(7, 0.6);
+    }
+    const agLow = agWinner(1e-5), agHigh = agWinner(5);
+    check("低 Cl⁻ 时 AgCl(s) 占优", agLow === "AgCl", "winner=" + agLow);
+    check("高 Cl⁻ 时 AgCl₂⁻ 占优", agHigh === "AgCl2-", "winner=" + agHigh);
+
+    // 7. 碳酸盐在酸性区溶解（CaCO3，以 C 为主元素）
+    const cac = makeSys({ main: "C", selected: ["CaCO3", "CO2", "HCO3-", "CO32-"], env: { "Ca2+": { on: true, c: 0.01 } }, Ctot: 0.01 });
+    const wAcid = cac.winner(3, 0.1), wBase = cac.winner(11, 0.1);
+    check("CaCO₃ 在酸性区不占优", wAcid !== "CaCO3", "pH3 winner=" + wAcid);
+    check("CaCO₃ 在高 pH 占优或与碳酸根竞争", wBase === "CaCO3" || wBase === "CO32-", "pH11 winner=" + wBase);
+
+    // 8. 铜氨：pH 9 下增加 NH3，Cu(OH)2 先沉淀后溶解
+    function cuSolidFrac(cNH3) {
+      const sys = makeSys({ main: "Cu", selected: ["Cu2+", "Cu(OH)2", "Cu(NH3)42+"], env: { "NH3": { on: true, c: cNH3 } }, Ctot: 0.01 });
+      const sp = sys.speciate(9, 0.2, { Ctot: 0.01 });
+      return sp.solid ? sp.solid.frac : 0;
+    }
+    const f0 = cuSolidFrac(1e-5), f1 = cuSolidFrac(0.001), f2 = cuSolidFrac(1);
+    check("Cu(OH)₂ 低氨时沉淀", f0 > 0.5, "frac=" + f0.toFixed(3));
+    check("Cu(OH)₂ 高氨时溶解", f2 < 0.2, "frac=" + f2.toFixed(3));
+    check("铜氨体系固相分数随 NH₃ 下降", f0 >= f1 && f1 >= f2, [f0, f1, f2].map(v => v.toFixed(4)).join(" → "));
+
+    // 9. 反应式含 e⁻
+    const feR = fe.balance("Fe3+", "Fe2+");
+    check("Fe³⁺/Fe²⁺ 反应式含 e⁻", !!(feR && (feR.left.some(x => x.id === "e-") || feR.right.some(x => x.id === "e-"))), JSON.stringify(feR && feR.left));
+    check("Fe³⁺/Fe²⁺ 反应式 E° 与 logK 自洽", feR && close(feR.E0, -feR.dG0 / (feR.nE * C.F_KJ), 1e-9), "");
+
+    // 10. 气体 Henry
+    const H = (aq, g) => Math.exp((D.byId[aq].g - D.byId[g].g) * 1000 / (C.R * C.T));
+    check("CO₂ Henry≈29 bar/M", close(H("CO2", "CO2g"), 29.7, 5), H("CO2", "CO2g").toFixed(2));
+    check("NH₃ Henry≈0.017 bar/M", close(H("NH3", "NH3g"), 0.017, 0.01), H("NH3", "NH3g").toFixed(4));
+
+    // 11. 气体逸出
+    const cl = makeSys({ main: "Cl", selected: ["Cl-", "Cl2", "Cl2g"], Ctot: 0.1 });
+    const gs = cl.gasState(2, 1.5, { Ctot: 0.1, V0: 0 });
+    check("Cl₂ 在 pH2/E1.5 时逸出（Vg>0 或 p≈Penv）", Object.keys(gs.p).length === 0 || gs.Vg > 0 || gs.p["Cl2g"] >= 0.99, JSON.stringify(gs.p) + " Vg=" + gs.Vg);
+
+    // 12. 碱性写法
+    const alk = fe.alkalineForm(fe.balance("Fe3+", "Fe2+"));
+    check("碱性写法不再出现 H⁺", !alk.left.concat(alk.right).some(x => x.id === "H+"), "");
+
+    // 13. lg[NH₃] 横轴与氨配合物
+    const cuA = makeSys({ main: "Cu", selected: ["Cu2+", "Cu(NH3)42+"], env: {}, Ctot: 0.01, xAxis: "pNH3", pHfix: 10 });
+    const wNH3low = cuA.winner(-6, 0.2), wNH3high = cuA.winner(1, 0.2);
+    check("lg[NH₃] 低时 Cu²⁺ 占优", wNH3low === "Cu2+", "winner=" + wNH3low);
+    check("lg[NH₃] 高时铜氨配合物占优", wNH3high === "Cu(NH3)42+", "winner=" + wNH3high);
+
+    // 14. C 模式 N₂ 分压
+    const nSys = makeSys({ main: "N", selected: ["N2", "NH4+", "NO2-"], Ctot: 0.01 });
+    const nSp = nSys.speciate(7, 0.2, { Ctot: 0.01, keepGas: true });
+    const nGas = nSp.present.find(p => p.id === "N2");
+    check("C 模式 N₂ 以气相分压出现", !!(nGas && nGas.gas && nGas.p > 0), nGas ? "p=" + nGas.p : "missing");
+
+    // 15. 反应列表
+    const groups = fe.reactionList({ boundaries: [] });
+    check("Fe 预设反应分组非空", groups.redox.length + groups.acidbase.length + groups.precipitation.length + groups.complex.length > 0,
+      Object.keys(groups).map(k => k + ":" + groups[k].length).join(" "));
+
+  } catch (e) {
+    fail++;
+    rows.push(["EXCEPTION", "FAIL", e.stack || e.message]);
+  }
+
+  function render() {
+    const sum = $("summary");
+    sum.textContent = fail === 0 ? "ALL PASS · " + pass + " checks" : fail + " FAIL / " + pass + " pass";
+    sum.className = "summary " + (fail === 0 ? "ok" : "bad");
+    const out = $("out");
+    out.innerHTML = "<table><thead><tr><th>检查</th><th>结果</th><th>细节</th></tr></thead><tbody>" +
+      rows.map(r => `<tr><td>${r[0]}</td><td class="${r[1] === 'PASS' ? 'pass' : 'fail'}">${r[1]}</td><td><pre>${String(r[2]).replace(/</g, '&lt;')}</pre></td></tr>`).join("") +
+      "</tbody></table><h2>pKa / families</h2><pre>" + JSON.stringify(pka, null, 2) + "</pre>";
+  }
+  render();
+})();
+</script>
+</body>
+</html>

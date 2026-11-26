@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pourbaix 图 · 电位–pH 相图</title>
+<style>
+  :root{
+    --bg:#f3f0f8; --bg2:#ece6f4; --panel:#ffffff; --panel2:#f6f1fb; --panel3:#efe7f8;
+    --ink:#342c40; --ink2:#4a4158; --muted:#8b7f9c; --line:#e2d8ee; --line2:#d4c6e4;
+    --accent:#6f4fa0; --accent-soft:#efe6fa; --accent2:#4b69c6; --blue:#5b7fc7;
+    --good:#4a7c3f; --warn:#9a6a1e; --warn-border:#e5cfa4; --bad:#b84a4a;
+    --plot:#fdfcff; --grid:#eee7f6; --grid2:#f5f0fa; --water:#b6a5c9; --label-bg:#ffffffd9;
+    --mono:"JetBrains Mono","Cascadia Code","SFMono-Regular",Consolas,monospace;
+    --serif:"Cambria Math","STIX Two Math","Times New Roman",serif;
+    --shadow:0 10px 34px -22px #3a2a5a88;
+  }
+  body[data-theme="dark"]{
+    --bg:#12101a; --bg2:#171420; --panel:#1b1726; --panel2:#241f31; --panel3:#2a2439;
+    --ink:#ece7f5; --ink2:#d8d0e6; --muted:#a69ab8; --line:#342c45; --line2:#463a5c;
+    --accent:#b396e8; --accent-soft:#2d2540; --accent2:#85a9ff; --blue:#7d9ee6;
+    --good:#7cc46b; --warn:#d8ac57; --warn-border:#5a4626; --bad:#ee7d7d;
+    --plot:#15121f; --grid:#2a2338; --grid2:#211b2e; --water:#6e5c88; --label-bg:#1b1726e6;
+    --shadow:0 10px 34px -20px #000a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(1200px 700px at 85% -10%, #e9ddf7 0%, transparent 55%),
+      radial-gradient(900px 600px at -10% 20%, #e4ecfb 0%, transparent 50%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    font-size:13.5px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  body[data-theme="dark"]{
+    background:
+      radial-gradient(1200px 700px at 85% -10%, #241a3a 0%, transparent 55%),
+      radial-gradient(900px 600px at -10% 20%, #16203a 0%, transparent 50%),
+      var(--bg);
+  }
+  *{scrollbar-width:thin; scrollbar-color:var(--line2) transparent}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:8px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--accent);background-clip:content-box}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  button,select,input{font-family:inherit;color:var(--ink)}
+  button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;transition:border-color .15s,background .15s,color .15s,transform .05s}
+  button:hover{border-color:var(--accent)}
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.06)}
+  button.ghost{background:transparent;border-color:transparent;color:var(--muted);padding:4px 6px}
+  button.ghost:hover{color:var(--accent);background:var(--panel2)}
+  button.small{padding:3px 8px;font-size:11px}
+  button:disabled{opacity:.42;cursor:not-allowed}
+  select{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 7px;font-size:12px;max-width:100%}
+  input[type=number]{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:74px}
+  input[type=range]{width:100%;accent-color:var(--accent);height:18px;cursor:pointer}
+  input[type=checkbox]{appearance:none;-webkit-appearance:none;width:15px;height:15px;border:1.5px solid var(--line2);border-radius:4px;background:var(--panel);position:relative;cursor:pointer;flex:0 0 auto;transition:.12s}
+  input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+  input[type=checkbox]:checked::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+  input[type=checkbox]:disabled{opacity:.4;cursor:not-allowed}
+  sub,sup{font-size:.7em;line-height:0;position:relative;vertical-align:baseline}
+  sub{bottom:-.28em} sup{top:-.42em}
+  .chem{font-family:var(--serif);font-size:1.03em;letter-spacing:.005em;white-space:nowrap}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .muted{color:var(--muted)}
+
+  .app{display:grid;grid-template-columns:392px minmax(0,1fr);max-width:1840px;margin:0 auto;align-items:start}
+  .left{position:sticky;top:0;height:100vh;overflow-y:auto;overflow-x:hidden;padding:18px 16px 40px;background:var(--bg2);border-right:1px solid var(--line)}
+  .right{padding:20px 24px 70px;min-width:0}
+  @media(max-width:1120px){
+    .app{grid-template-columns:1fr}
+    .left{position:static;height:auto;overflow:visible;border-right:none;border-bottom:1px solid var(--line)}
+    .right{padding:16px 14px 50px}
+  }
+
+  .brand{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:0 2px 14px}
+  .brand h1{font-size:21px;line-height:1.2;margin:0;letter-spacing:-.02em;font-weight:650}
+  .brand h1 .thin{font-weight:300;color:var(--accent)}
+  .brand p{margin:4px 0 0;font-size:11px;color:var(--muted)}
+  .brand .mark{width:46px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#9d84c8);box-shadow:0 6px 16px -8px var(--accent);display:grid;place-items:center;color:#fff;font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;white-space:nowrap;flex:0 0 auto}
+
+  details.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:0 0 11px;box-shadow:0 2px 10px -8px #2a1a4a33;overflow:hidden}
+  details.card>summary{display:flex;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;list-style:none;user-select:none}
+  details.card>summary::-webkit-details-marker{display:none}
+  details.card>summary .chev{width:16px;text-align:center;color:var(--muted);font-size:10px;transition:transform .18s}
+  details.card[open]>summary .chev{transform:rotate(90deg)}
+  details.card>summary h2{font-size:12.5px;margin:0;font-weight:650;letter-spacing:.01em;flex:1}
+  details.card>summary .count{font-size:10px;color:var(--muted);font-family:var(--mono);white-space:nowrap}
+  .sec-num{width:21px;height:21px;border-radius:7px;background:var(--accent-soft);color:var(--accent);font-size:10.5px;font-weight:700;display:grid;place-items:center;flex:0 0 auto;font-family:var(--mono)}
+  .cbody{padding:0 12px 12px}
+
+  .elems{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  .elbtn{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 3px 5px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);cursor:pointer;transition:.14s;line-height:1.15}
+  .elbtn:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .elbtn.active{background:linear-gradient(150deg,var(--accent),#8a6bb8);border-color:var(--accent);color:#fff;box-shadow:0 5px 12px -8px var(--accent)}
+  .elbtn .sym{font-family:var(--serif);font-size:14px;font-weight:700}
+  .elbtn .cn{font-size:9.5px;opacity:.72}
+  .elbtn.active .cn{opacity:.9}
+
+  .field{margin:10px 0 0}
+  .field>.lab{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-bottom:3px}
+  .field>.lab b{font-weight:500;color:var(--ink2)}
+  .field>.lab .v{font-family:var(--mono);font-size:10.5px;color:var(--accent2);white-space:nowrap}
+  .sliderline{display:flex;align-items:center;gap:8px}
+  .sliderline .v{font-family:var(--mono);font-size:10.5px;color:var(--accent2);min-width:82px;text-align:right;white-space:nowrap}
+  .snaps{display:flex;gap:4px;margin-top:4px}
+  .snaps button{flex:1;padding:2px 4px;font-size:9.5px;border-radius:5px;background:var(--panel2);color:var(--muted)}
+  .snaps button:hover,.snaps button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .note-line{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:6px}
+  .note-line.warn{color:var(--warn)}
+  .divider{height:1px;background:var(--line);margin:11px 0}
+
+  .chips{display:flex;flex-wrap:wrap;gap:4px;margin:5px 0 7px}
+  .chip{padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);font-size:10.5px;cursor:pointer;line-height:1.4;transition:.12s}
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+  .chip.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .chip.cat.active{background:var(--accent2);border-color:var(--accent2)}
+  .chip .x{opacity:.6;margin-left:2px}
+  .filter-title{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:4px}
+  .filter-title .mini-actions button{padding:0 2px;font-size:10px;border:none;background:none;color:var(--accent)}
+  .filter-title .mini-actions button:hover{text-decoration:underline}
+
+  .splist{display:flex;flex-direction:column;gap:1px;max-height:390px;overflow-y:auto;padding:2px 2px 2px 0;margin-top:4px}
+  .sp-row{display:grid;grid-template-columns:17px minmax(0,1fr) auto;gap:7px;align-items:start;padding:5px 6px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+  .sp-row:hover{background:var(--panel2);border-color:var(--line)}
+  .sp-row.selected{background:var(--accent-soft);border-color:#ddcdf0}
+  body[data-theme="dark"] .sp-row.selected{border-color:#463a5c}
+  .sp-row.blocked{opacity:.5;cursor:not-allowed}
+  .sp-row .fwrap{min-width:0}
+  .sp-row .fm{font-size:13.5px;line-height:1.35;overflow-wrap:anywhere}
+  .sp-row .nm{font-size:10px;color:var(--muted);margin-left:4px;white-space:normal;line-height:1.3}
+  .sp-row .dg{font-family:var(--mono);font-size:9.5px;color:var(--muted);text-align:right;white-space:nowrap;padding-top:2px}
+  .sp-row .badges{grid-column:2/4;display:flex;flex-wrap:wrap;gap:3px;margin-top:2px}
+  .badge{font-size:8.5px;padding:0 5px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:var(--panel);line-height:1.55;white-space:nowrap}
+  .badge.derived{color:var(--warn);border-color:var(--warn-border);background:transparent}
+  .badge.state{color:var(--accent2);border-color:#cdd9f2;background:transparent}
+  .badge.need{color:var(--bad);border-color:#e5c1c1;background:transparent}
+  .sp-custom{grid-column:2/4;display:flex;flex-direction:column;gap:3px;margin-top:4px;padding:4px 6px;background:var(--panel);border:1px dashed var(--line2);border-radius:6px}
+  .sp-custom .row{display:flex;align-items:center;gap:6px}
+  .sp-custom .row .v{font-family:var(--mono);font-size:10px;color:var(--accent2);min-width:74px;text-align:right}
+  .sp-custom .row button{padding:0 4px;font-size:9.5px;border:none;background:none;color:var(--muted)}
+  .sp-custom .row button:hover{color:var(--bad)}
+
+  .env-group{border:1px solid var(--line);border-radius:9px;margin:5px 0;overflow:hidden;background:var(--panel2)}
+  .env-group>summary{display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:11px;cursor:pointer;list-style:none;color:var(--ink2);user-select:none}
+  .env-group>summary::-webkit-details-marker{display:none}
+  .env-group>summary .chev{font-size:9px;color:var(--muted);transition:transform .15s}
+  .env-group[open]>summary .chev{transform:rotate(90deg)}
+  .env-group>summary .gcount{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--muted)}
+  .env-body{padding:0 7px 6px}
+  .env-empty{font-size:10.5px;color:var(--muted);padding:4px 3px 6px;display:flex;align-items:center;gap:6px}
+  .env-empty button{padding:1px 7px;font-size:10px}
+  .env-row{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 7px;margin:5px 0}
+  .env-row .top{display:flex;align-items:center;gap:6px}
+  .env-row .lbl{font-size:12px;font-weight:500}
+  .env-row .tag{font-size:9px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 5px}
+  .env-row .rm{margin-left:auto;padding:0 4px;border:none;background:none;color:var(--muted);font-size:13px;line-height:1}
+  .env-row .rm:hover{color:var(--bad)}
+  .env-row .note{font-size:9.5px;color:var(--muted);margin-top:1px}
+  .env-row .sliderline{margin-top:3px}
+  .env-row .sliderline .v{min-width:78px;font-size:10px}
+  .env-row .ratio{font-size:9.5px;color:var(--muted);margin-top:2px}
+
+  .seg{display:flex;gap:3px;background:var(--panel2);padding:3px;border-radius:9px;border:1px solid var(--line)}
+  .seg button{flex:1;border:none;background:transparent;padding:5px 4px;border-radius:6px;font-size:11px;color:var(--muted);cursor:pointer;white-space:nowrap}
+  .seg button.active{background:var(--panel);color:var(--accent);box-shadow:0 1px 4px -1px #2a1a4a33;font-weight:650}
+  .seg.tiny button{font-size:10px;padding:3px 2px}
+  .mode-desc{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.5;min-height:28px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  .toggle{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink2);margin:5px 0;cursor:pointer;user-select:none}
+  .toggle span{flex:1}
+  .toggle .hint{font-size:9.5px;color:var(--muted)}
+  .adv{border-top:1px dashed var(--line);margin-top:9px;padding-top:7px}
+  .adv summary{font-size:10.5px;color:var(--muted);cursor:pointer;list-style:none}
+  .adv summary::-webkit-details-marker{display:none}
+  .adv summary:hover{color:var(--accent)}
+
+  .topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .presets{display:flex;gap:5px;flex-wrap:wrap;flex:1;min-width:0}
+  .preset{padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);font-size:11px;color:var(--ink2);cursor:pointer;white-space:nowrap;transition:.14s}
+  .preset:hover{border-color:var(--accent);color:var(--accent)}
+  .preset.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 5px 12px -8px var(--accent)}
+  .top-actions{display:flex;gap:6px;flex:0 0 auto}
+  .top-actions button{font-size:11px;padding:4px 10px}
+
+  .chart-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  .chart-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 9px}
+  .eyebrow{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .chart-head h2{font-size:18px;margin:2px 0 0;font-weight:650;letter-spacing:-.015em}
+  .chart-meta{font-size:10.5px;color:var(--muted);text-align:right;line-height:1.55;max-width:52%;font-family:var(--mono)}
+  .chart-meta b{color:var(--ink2);font-weight:500}
+  .canvas-wrap{position:relative;background:var(--plot);margin:0 10px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .canvas-wrap canvas{display:block;width:100%}
+  #overlay{position:absolute;inset:0;pointer-events:none}
+  #plot{cursor:crosshair}
+  .chart-foot{padding:10px 16px 14px}
+  .chart-hint{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:10px;color:var(--muted);margin-top:8px}
+  .chart-hint .left-hint{flex:1;min-width:0}
+  .chart-hint .right-hint{font-family:var(--mono);white-space:nowrap;color:var(--accent2);font-size:9.5px}
+
+  .legend{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
+  .lg{display:inline-flex;align-items:center;gap:5px;padding:3px 7px 3px 4px;border:1px solid var(--line);border-radius:999px;background:var(--panel2);font-size:11px;line-height:1.45;max-width:100%}
+  .lg .sw{width:14px;height:14px;border-radius:4px;border:1px solid #0002;padding:0;background:none;cursor:pointer;flex:0 0 auto;overflow:hidden}
+  .lg .sw::-webkit-color-swatch-wrapper{padding:0}
+  .lg .sw::-webkit-color-swatch{border:none;border-radius:3px}
+  .lg .fm{white-space:nowrap}
+  .lg .nm{font-size:9px;color:var(--muted);white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+  .lg .tag{font-size:8px;color:var(--muted)}
+  .lg.dim{opacity:.5}
+  .lg.over{box-shadow:0 0 0 2px var(--accent-soft)}
+
+  #tooltip{position:absolute;z-index:40;background:var(--panel);border:1px solid var(--accent);border-radius:10px;box-shadow:0 12px 34px -14px #2a1a4a66;padding:9px 11px;max-width:370px;font-size:12px;pointer-events:none;display:none}
+  #tooltip .thead{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:650;line-height:1.35}
+  #tooltip .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;border:1px solid #0001}
+  #tooltip .tbadge{font-size:8.5px;border:1px solid var(--line);border-radius:999px;padding:0 5px;color:var(--muted);font-weight:400}
+  #tooltip .tmeta{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:4px;display:flex;flex-wrap:wrap;gap:3px 9px}
+  #tooltip .teq{margin-top:5px;line-height:1.75;font-size:12.5px}
+  #tooltip .tnote{font-size:9.5px;color:var(--muted);margin-top:5px;border-top:1px dashed var(--line);padding-top:4px;line-height:1.5}
+  #tooltip .trow{display:flex;justify-content:space-between;gap:12px;font-size:10.5px;margin-top:2px}
+  #tooltip .trow b{font-family:var(--mono);font-weight:500;color:var(--ink2)}
+  #tooltip .mini-legend{display:flex;flex-wrap:wrap;gap:4px 8px;margin-top:4px;font-size:10px}
+
+  #warnbox:empty{display:none}
+  .warnbox{margin:10px 16px 0;padding:7px 10px;border:1px solid var(--warn-border);background:var(--accent-soft);color:var(--warn);border-radius:8px;font-size:11px}
+
+  .reaction-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;margin-top:18px;box-shadow:var(--shadow);overflow:hidden}
+  .reaction-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 18px;border-bottom:1px solid var(--line)}
+  .reaction-head h2{font-size:16px;margin:2px 0 0;font-weight:650;letter-spacing:-.01em}
+  .reaction-actions{display:flex;align-items:center;gap:8px}
+  .reaction-actions .cnt{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .reaction-body{max-height:360px;overflow-y:auto;padding:6px 14px 14px;transition:max-height .2s}
+  .reaction-body.expanded{max-height:74vh}
+  .rxn-group{margin-top:4px}
+  .rxn-group>h3{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin:11px 0 3px;font-weight:650}
+  .rxn-group>h3 .n{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0}
+  .rxn-group>h3 .desc{font-size:9px;color:var(--muted);letter-spacing:0;text-transform:none;font-weight:400;margin-left:auto}
+  .rxn{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--line2);border-radius:8px;padding:7px 9px;margin:4px 0}
+  .rxn.redox{border-left-color:#7d98cf}
+  .rxn.acidbase{border-left-color:#a98ccb}
+  .rxn.precipitation{border-left-color:#c2a07a}
+  .rxn.complex{border-left-color:#7fae9a}
+  .rxn.stable{border-left-color:var(--accent)}
+  .rxn.phase{border-left-color:#b9b0c8}
+  .rxn .eq{font-size:13px;line-height:1.8;overflow-wrap:anywhere}
+  .rxn .meta{font-family:var(--mono);font-size:9.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:3px 10px;margin-top:3px}
+  .rxn .meta b{font-weight:500;color:var(--accent2)}
+  .rxn .meta .tag{color:var(--accent);border:1px solid var(--line);border-radius:999px;padding:0 4px;font-size:8.5px}
+  .rxn-empty{font-size:11px;color:var(--muted);padding:14px 4px;text-align:center}
+  .method{font-size:10px;color:var(--muted);line-height:1.7;margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+  .method b{color:var(--ink2);font-weight:600}
+  .method code{font-family:var(--mono);font-size:9.5px;background:var(--panel2);padding:0 3px;border-radius:3px}
+
+  .modal{position:fixed;inset:0;z-index:100;display:none}
+  .modal.open{display:grid;place-items:center}
+  .modal-backdrop{position:absolute;inset:0;background:#241a3a66}
+  .modal-panel{position:relative;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;width:92vw;max-width:760px;height:min(86vh,760px);max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -30px #1a0f2e88}
+  .dlg-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex:0 0 auto}
+  .dlg-head h2{font-size:16px;margin:0}
+  .dlg-head .sub{font-size:10px;color:var(--muted);margin-top:1px}
+  .dlg-body{padding:10px 16px 16px;overflow-y:auto;flex:1 1 auto;min-height:0}
+  .dlg-group{margin-top:10px}
+  .dlg-group>h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0 0 4px}
+  .dlg-item{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 7px;border:1px solid var(--line);border-radius:8px;margin:4px 0;background:var(--panel2)}
+  .dlg-item>input{flex:0 0 auto}
+  .dlg-item .main{flex:1 1 220px;min-width:0}
+  .dlg-item .fm{font-size:13px;white-space:normal;overflow-wrap:anywhere}
+  .dlg-item .note{font-size:9.5px;color:var(--muted)}
+  .dlg-item .tag{flex:0 0 auto}
+  .dlg-item .sl{flex:1 0 100%;display:flex;align-items:center;gap:7px;margin-top:2px}
+  .dlg-item .sl .v{font-family:var(--mono);font-size:9.5px;color:var(--accent2);min-width:74px;text-align:right}
+  .dlg-item .sl .ratio-v{font-family:var(--mono);font-size:9.5px;color:var(--muted);min-width:85px;text-align:right}
+  .dlg-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;border-top:1px solid var(--line);background:var(--panel);flex:0 0 auto}
+  .dlg-foot .foot-left{display:flex;gap:6px}
+
+  @media(max-width:680px){
+    .chart-head{flex-direction:column;align-items:flex-start;gap:6px}
+    .chart-meta{text-align:left;max-width:100%}
+    .chart-meta br{display:none}
+    .topbar{gap:6px}
+    .presets{order:2;flex-basis:100%}
+    .top-actions{order:1;margin-left:auto}
+    .lg .nm{display:none}
+    .rxn .eq{font-size:12px}
+    .reaction-body{max-height:420px}
+  }
+</style>
+</head>
+<body data-theme="quiet">
+<div class="app">
+  <!-- ================= 左栏 ================= -->
+  <aside class="left" id="left">
+    <header class="brand">
+      <div>
+        <h1>Pourbaix <span class="thin">图</span></h1>
+        <p>电位–pH 优势区图 · 25 °C · 理想溶液</p>
+      </div>
+      <div class="mark">E–pH</div>
+    </header>
+
+    <!-- 1 主元素 -->
+    <details class="card" open id="sec-main">
+      <summary><span class="sec-num">1</span><h2>主元素</h2><span class="count" id="main-count"></span><span class="chev">▶</span></summary>
+      <div class="cbody">
+        <div class="elems" id="elems"></div>
+      </div>
+    </details>
+
+    <!-- 2 典型物种 -->
+    <details class="card" open id="sec-species">
+      <summary><span class="sec-num">2</span><h2>典型物种</h2><span class="count" id="sp-count"></span><span class="chev">▶</span></summary>
+      <div class="cbody">
+        <div class="filter-title"><span>按价态筛选</span></div>
+        <div class="chips" id="ox-filter"></div>
+        <div class="filter-title"><span>按归类筛选（多选，任一匹配）</span><span class="mini-actions"><button id="sp-select-all">全选可见</button><button id="sp-clear">清空</button></span></div>
+        <div class="chips" id="cat-filter"></div>
+        <div class="splist" id="species-list"></div>
+        <div class="note-line" id="species-note"></div>
+      </div>
+    </details>
+
+    <!-- 3 化学环境 -->
+    <details class="card" open id="sec-env">
+      <summary><span class="sec-num">3</span><h2>化学环境</h2><span class="count" id="env-count"></span><span class="chev">▶</span></summary>
+      <div class="cbody">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+          <div class="note-line" style="margin:0">只展示已启用物料；全部物料在弹出窗口中。</div>
+          <button class="small" id="env-manage">＋ 筛选物料</button>
+        </div>
+        <div class="env-row" style="margin-top:7px">
+          <div class="top">
+            <span class="lbl">主元素总浓度 C<sub>tot</sub></span>
+            <span class="tag">总浓度</span>
+            <span class="v mono" id="ctotval" style="margin-left:auto;color:var(--accent2);font-size:10px"></span>
+          </div>
+          <div class="sliderline"><input type="range" id="ctot" min="-8" max="1.7482" step="0.0001" value="-3"></div>
+          <div class="note" id="ctot-note"></div>
+        </div>
+        <div id="env-groups"></div>
+        <div class="divider"></div>
+        <div class="field" style="margin-top:0">
+          <div class="lab"><span>环境压强 <b>P<sub>env</sub></b></span><span class="v" id="penvval"></span></div>
+          <div class="sliderline"><input type="range" id="penv" min="-3" max="2" step="0.01" value="0"></div>
+        </div>
+        <div class="field">
+          <div class="lab"><span>死体积 <b>V<sub>0</sub></b>（氩气气氛）</span><span class="v" id="v0val"></span></div>
+          <div class="sliderline"><input type="range" id="v0" min="0" max="10" step="0.1" value="0"></div>
+        </div>
+        <label class="toggle" style="margin-top:8px"><input type="checkbox" id="couple" checked><span>沉淀/配位–酸碱耦合</span><span class="hint">配体随 pH 质子化</span></label>
+        <div class="note-line">勾选配体会自动勾选当前主元素的相关沉淀；取消全部相关沉淀后，配体自动取消。</div>
+      </div>
+    </details>
+
+    <!-- 4 显示与颜色 -->
+    <details class="card" open id="sec-display">
+      <summary><span class="sec-num">4</span><h2>显示 · 颜色 · 写法</h2><span class="chev">▶</span></summary>
+      <div class="cbody">
+        <div class="field" style="margin-top:0">
+          <div class="lab"><span>相区显示模式</span></div>
+          <div class="seg" id="mode-btns">
+            <button data-mode="A">A · 优势相</button>
+            <button data-mode="B">B · 叠色</button>
+            <button data-mode="C" class="active">C · 平衡</button>
+          </div>
+          <div class="mode-desc" id="mode-desc"></div>
+        </div>
+        <div class="field">
+          <div class="lab"><span>展示浓度阈值</span><span class="v" id="cdispval"></span></div>
+          <div class="sliderline"><input type="range" id="cdisp" min="-10" max="-2" step="0.01" value="-5"></div>
+        </div>
+        <div class="field">
+          <div class="lab"><span>横轴</span><span class="v" id="xaxis-note"></span></div>
+          <div class="seg" id="xaxis-btns">
+            <button data-axis="pH" class="active">pH</button>
+            <button data-axis="pCl">lg[Cl⁻]</button>
+            <button data-axis="pNH3">lg[NH₃]</button>
+          </div>
+        </div>
+        <div class="grid3">
+          <div class="field">
+            <div class="lab"><span>正文写法</span></div>
+            <select id="fmode" style="width:100%"><option value="html">HTML 角标</option><option value="unicode">Unicode</option><option value="plain">纯文本</option></select>
+          </div>
+          <div class="field">
+            <div class="lab"><span>纯文本消歧</span></div>
+            <select id="fplain" style="width:100%"><option value="compact">紧凑 SO42−</option><option value="spaced">空格 SO4 2−</option><option value="paren">括号 (SO4)2−</option></select>
+          </div>
+          <div class="field">
+            <div class="lab"><span>图例写法</span></div>
+            <select id="flegend" style="width:100%"><option value="unicode">Unicode</option><option value="html">HTML</option><option value="plain">纯文本</option></select>
+          </div>
+        </div>
+        <div class="field">
+          <div class="lab"><span>配色</span></div>
+          <div class="seg tiny" id="palette-btns">
+            <button data-pal="intrinsic" class="active">固有</button>
+            <button data-pal="random">随机</button>
+          </div>
+          <div class="snaps" style="margin-top:5px">
+            <button id="recolor">🎲 重新配色</button><button id="clear-colors">清除自定义色</button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <label class="toggle"><input type="checkbox" id="show-boundary" checked><span>显示相界线</span></label>
+        <label class="toggle"><input type="checkbox" id="show-water" checked><span>水稳定线（H⁺/H₂、O₂/H₂O）</span></label>
+        <label class="toggle"><input type="checkbox" id="show-medium" checked><span>介质解离线 / 电对线</span></label>
+        <label class="toggle"><input type="checkbox" id="show-all-redox"><span>显示所有电对线（含亚稳）</span></label>
+        <label class="toggle"><input type="checkbox" id="show-labels" checked><span>相区标注优势形态</span></label>
+        <label class="toggle"><input type="checkbox" id="show-grid" checked><span>网格</span></label>
+        <details class="adv">
+          <summary>纵轴范围与重置</summary>
+          <div class="grid2" style="margin-top:6px">
+            <div class="field" style="margin:0"><div class="lab"><span>E 下限 / V</span></div><input type="number" id="emin" step="0.1" value="-1.2"></div>
+            <div class="field" style="margin:0"><div class="lab"><span>E 上限 / V</span></div><input type="number" id="emax" step="0.1" value="1.6"></div>
+          </div>
+          <div class="snaps" style="margin-top:6px"><button id="autoscale">自动纵轴</button><button id="reset-all">重置当前体系</button></div>
+        </details>
+      </div>
+    </details>
+
+    <div class="note-line" style="padding:0 4px 6px">数据：NBS（Wagman et al., 1982）为主；配合物/部分沉淀的 ΔGf° 由 logβ/Ksp 自洽推得，行内标注「推得」。理想溶液，不含动力学/过电位。</div>
+  </aside>
+
+  <!-- ================= 右栏 ================= -->
+  <main class="right" id="right">
+    <div class="topbar">
+      <div class="presets" id="presets"></div>
+      <div class="top-actions">
+        <button id="save-png">保存 PNG</button>
+      </div>
+    </div>
+
+    <section class="chart-card">
+      <div class="chart-head">
+        <div>
+          <div class="eyebrow">Potential–pH diagram</div>
+          <h2 id="chart-title">Fe–H₂O 体系</h2>
+        </div>
+        <div class="chart-meta" id="chart-meta"></div>
+      </div>
+      <div class="warnbox" id="warnbox"></div>
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="plot"></canvas>
+        <canvas id="overlay"></canvas>
+        <div id="tooltip"></div>
+      </div>
+      <div class="chart-foot">
+        <div class="legend" id="legend"></div>
+        <div class="chart-hint">
+          <div class="left-hint" id="hover-hint">在相区中移动查看 Ĝ；靠近相界线查看配平反应。点击图例色块可自定义颜色。</div>
+          <div class="right-hint" id="render-status"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="reaction-card">
+      <div class="reaction-head">
+        <div>
+          <div class="eyebrow">Balanced reactions</div>
+          <h2>现场配平的反应式</h2>
+        </div>
+        <div class="reaction-actions">
+          <span class="cnt" id="reaction-count"></span>
+          <button class="small" id="reaction-toggle">展开</button>
+        </div>
+      </div>
+      <div class="reaction-body" id="reactions"></div>
+    </section>
+
+    <footer class="method">
+      <b>方法</b>：物种 ΔGf° 经线性代数分解到参考态（主元素标准态 + H⁺ + H₂O + e⁻ + 配体参考态），再按
+      <code>Ĝ = [ΔGf° − Σνμ]/n + QE</code> 比较优势相。A 模式每个相区浓度取总浓度；B/C 模式按质量作用与物料平衡求真实分布，
+      固相按最低 g 的 Ksp 缓冲，气体按 Henry 定律与 <code>P_env</code> 钳制；C 模式中 N₂ 等无溶解前体的气体由化学势反算分压后着色。E° = −ΔG°/(nF)，log K = −ΔG°/(RT ln 10)。
+      配体酸碱耦合：参考态活度 = 总浓度 × 分布分数 α(pH)。<br>
+      <b>说明</b>：25 °C，活度≈浓度（纯固体/纯水 a=1）；配合物、部分沉淀/气体的 ΔGf° 由 logβ/Ksp/Henry 推得并在物种行标注。
+      多聚钒酸根、部分硫物种、碳酸/亚硫酸的 CO₂·H₂O 形态做了简化；气体逸出用死体积 + 氩气稀释的近似模型。相图用于教学，不替代工程热力学数据库。
+    </footer>
+  </main>
+</div>
+
+<!-- 环境管理弹窗 -->
+<div id="env-dialog" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close="env-dialog"></div>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="env-dialog-title">
+    <div class="dlg-head">
+      <div>
+        <h2 id="env-dialog-title">化学环境物料</h2>
+        <div class="sub">勾选后会出现在左栏；配体/沉淀剂与相图中相关物种联动。</div>
+      </div>
+      <button class="ghost" id="env-dialog-close" aria-label="关闭">✕</button>
+    </div>
+    <div class="dlg-body" id="env-dialog-body"></div>
+    <div class="dlg-foot">
+      <div class="foot-left">
+        <button class="small" id="env-dialog-clear" title="关闭所有环境物料，并清空当前勾选的物种">清空物料与物种</button>
+        <button class="small" id="env-dialog-common" title="启用 Cl⁻、CO₃²⁻、NH₃ 三种常用物料">启用常用物料</button>
+      </div>
+      <button class="primary small" id="env-dialog-done">完成</button>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="chem.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
