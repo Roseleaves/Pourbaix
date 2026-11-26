@@ -1,4 +1,4 @@
-# Pourbaix 图互动演示（pourbaix4）
+# Pourbaix 图互动演示
 
 打开 `index.html` 即可使用，无需构建或本地服务器。
 
